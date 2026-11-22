@@ -113,9 +113,12 @@ final class Bearer {
 		$this->error         = null;
 		$this->authenticated = false;
 
+		// Guard the whole check: anything below that looks up the current user
+		// would otherwise run this method again halfway through.
 		$this->checking = true;
 		try {
-			$result = $this->validate( $token );
+			$result  = $this->validate( $token );
+			$allowed = ! is_wp_error( $result ) && $this->token_allows_request( $result );
 		} finally {
 			$this->checking = false;
 		}
@@ -125,7 +128,7 @@ final class Bearer {
 
 			return $user_id;
 		}
-		if ( ! $this->token_allows_request( $result ) ) {
+		if ( ! $allowed ) {
 			$this->error = new WP_Error(
 				'oauth_server_invalid_token',
 				__( 'The access token is not valid for this resource.', 'mcp-adapter' ),
@@ -220,8 +223,11 @@ final class Bearer {
 			return false;
 		}
 
-		$registered = $this->resources->find_by_route( $route );
-		return null !== $registered && hash_equals( untrailingslashit( $resource ), $this->resources->url_for( $registered ) );
+		// Compare with the request's own URL instead of looking the route up among the
+		// registered resources: that would boot the REST server before `init`, so
+		// routes registered from abilities wouldn't exist yet. The resource was
+		// checked against the registered resources when the token was issued.
+		return hash_equals( untrailingslashit( $resource ), $this->resources->url_for( $route ) );
 	}
 
 	/**

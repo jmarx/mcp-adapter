@@ -93,19 +93,27 @@ final class CimdFetcher implements CimdFetcherInterface {
 			if ( defined( 'CURLOPT_PROTOCOLS' ) && defined( 'CURLPROTO_HTTPS' ) ) {
 				curl_setopt( $handle, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS );
 			}
+			// One entry with every address: separate entries for the same host and port
+			// replace each other, leaving only the last (often IPv6, which fails on hosts
+			// without IPv6).
 			curl_setopt(
 				$handle,
 				CURLOPT_RESOLVE,
-				array_map(
-					/**
-					 * Formats an address for CURLOPT_RESOLVE.
-					 *
-					 * @param string $ip Public IP address.
-					 */
-					static function ( string $ip ) use ( $host ): string {
-						return $host . ':443:' . ( false !== strpos( $ip, ':' ) ? '[' . $ip . ']' : $ip );
-					},
-					$ips
+				array(
+					$host . ':443:' . implode(
+						',',
+						array_map(
+							/**
+							 * Formats an address for CURLOPT_RESOLVE.
+							 *
+							 * @param string $ip Public IP address.
+							 */
+							static function ( string $ip ): string {
+								return false !== strpos( $ip, ':' ) ? '[' . $ip . ']' : $ip;
+							},
+							$ips
+						)
+					),
 				)
 			);
 			// phpcs:enable
